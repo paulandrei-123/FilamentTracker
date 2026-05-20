@@ -38,19 +38,57 @@ export const FilamentDetail: React.FC<FilamentDetailProps> = ({
     onUpdateAmount(filament.id, Math.max(0, val));
   };
 
+  const resizeImage = (base64Str: string, maxDimension = 1000): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((maxDimension / width) * height);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((maxDimension / height) * width);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+    });
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        const updated = [...images, base64String];
-        onUpdatePictures(filament.id, updated);
-        setActiveImgIndex(updated.length - 1);
-      };
-      reader.readAsDataURL(file);
+    const fileList = Array.from(files);
+    const readPromises = fileList.map((file) => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const rawBase64 = reader.result as string;
+          const resized = await resizeImage(rawBase64);
+          resolve(resized);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readPromises).then((resizedBase64Strings) => {
+      const updated = [...images, ...resizedBase64Strings];
+      onUpdatePictures(filament.id, updated);
+      setActiveImgIndex(updated.length - 1);
     });
   };
 
@@ -287,12 +325,30 @@ export const FilamentDetail: React.FC<FilamentDetailProps> = ({
                   </div>
                 ))}
 
-                <label className="picture-upload-placeholder">
+                {/* Option 1: Take Photo via Camera */}
+                <label className="picture-upload-placeholder" title="Take photo using camera">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
                   </svg>
-                  <span>Add Photo</span>
+                  <span>Camera</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImageUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                {/* Option 2: Upload from Gallery */}
+                <label className="picture-upload-placeholder" title="Choose photo from gallery">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  <span>Gallery</span>
                   <input
                     type="file"
                     accept="image/*"
