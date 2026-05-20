@@ -177,7 +177,7 @@ Do NOT output markdown. Do NOT use markdown code blocks (\`\`\`json). Output raw
 If a value is not found on the label, return null for that field. Make your best guess for the color name based on the photo content or label text.`;
 
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
           {
             method: 'POST',
             headers: {
