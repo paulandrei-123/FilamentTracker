@@ -2,6 +2,49 @@ import React, { useState, useEffect } from 'react';
 import type { Filament } from '../types';
 import { ColorPickerCanvas } from './ColorPickerCanvas';
 
+const normalizeHex = (colorStr: string): string => {
+  if (!colorStr) return '#3b82f6';
+  const trimmed = colorStr.trim();
+  
+  // Use HTML5 Canvas to normalize color values (names, rgb, hsl, hex) to hex
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = trimmed;
+      const parsedColor = ctx.fillStyle;
+      if (parsedColor.startsWith('#')) {
+        return parsedColor.toLowerCase();
+      }
+      const rgbMatch = parsedColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (rgbMatch) {
+        const r = parseInt(rgbMatch[1], 10);
+        const g = parseInt(rgbMatch[2], 10);
+        const b = parseInt(rgbMatch[3], 10);
+        return '#' + [r, g, b].map(x => {
+          const hex = x.toString(16);
+          return hex.length === 1 ? '0' + hex : hex;
+        }).join('').toLowerCase();
+      }
+    }
+  } catch (e) {
+    console.error('Error normalizing hex', e);
+  }
+
+  if (trimmed.startsWith('#') && (trimmed.length === 7 || trimmed.length === 4)) {
+    if (trimmed.length === 4) {
+      const r = trimmed[1];
+      const g = trimmed[2];
+      const b = trimmed[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    return trimmed.toLowerCase();
+  }
+  return '#3b82f6';
+};
+
 interface FilamentFormProps {
   filament?: Filament; // If editing
   existingFilaments: Filament[];
@@ -23,7 +66,7 @@ export const FilamentForm: React.FC<FilamentFormProps> = ({
   const [brand, setBrand] = useState(filament?.brand || '');
   const [type, setType] = useState(filament?.type || 'PLA');
   const [color, setColor] = useState(filament?.color || '');
-  const [colorHex, setColorHex] = useState(filament?.colorHex || '#3b82f6');
+  const [colorHex, setColorHex] = useState(normalizeHex(filament?.colorHex || '#3b82f6'));
   const [subTypes, setSubTypes] = useState<string[]>(filament?.subTypes || []);
   const [subTypeInput, setSubTypeInput] = useState('');
   const [nozzleTempMin, setNozzleTempMin] = useState<number | ''>(filament?.nozzleTempMin ?? '');
@@ -166,6 +209,7 @@ Do NOT output markdown. Do NOT use markdown code blocks (\`\`\`json). Output raw
   "brand": "String (e.g. eSUN, Overture, Hatchbox, Sunlu, Prusament, Elegoo - normalize casing/spacing)",
   "type": "String (e.g. PLA, PETG, ABS, ASA, TPU, Nylon - MUST be capitalized standard names)",
   "color": "String (e.g. Silk White, Galaxy Silver, Pine Green, Matte Black)",
+  "colorHex": "String (Hex code like #ffffff, #000000, #3b82f6 representing the closest color of the filament)",
   "subTypes": ["Array of strings like Matte, High Flow, Silk, Glow in the dark, Carbon Fiber, Wood, Sparkly"],
   "nozzleTempMin": number or null,
   "nozzleTempMax": number or null,
@@ -174,7 +218,7 @@ Do NOT output markdown. Do NOT use markdown code blocks (\`\`\`json). Output raw
   "printSpeed": number or null,
   "description": "Any comments or secondary specs seen on the label (spool weight, length, etc.)"
 }
-If a value is not found on the label, return null for that field. Make your best guess for the color name based on the photo content or label text.`;
+If a value is not found on the label, return null for that field. Make your best guess for the color and colorHex based on the photo content or label text.`;
 
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
@@ -254,6 +298,11 @@ If a value is not found on the label, return null for that field. Make your best
     if (parsed.brand) setBrand(parsed.brand);
     if (parsed.type) setType(parsed.type);
     if (parsed.color) setColor(parsed.color);
+    if (parsed.colorHex) {
+      setColorHex(normalizeHex(parsed.colorHex));
+    } else if (parsed.color) {
+      setColorHex(normalizeHex(parsed.color));
+    }
     if (parsed.subTypes && Array.isArray(parsed.subTypes)) {
       // Merge unique
       setSubTypes(parsed.subTypes.filter(Boolean));
@@ -768,6 +817,7 @@ If a value is not found on the label, return null for that field. Make your best
       {isPickingColor && pictures.length > 0 && (
         <ColorPickerCanvas
           pictureSrc={pictures[0]}
+          initialColor={colorHex}
           onColorPicked={(pickedHex) => {
             setColorHex(pickedHex);
             setIsPickingColor(false);

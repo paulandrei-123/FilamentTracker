@@ -2,20 +2,22 @@ import React, { useRef, useEffect, useState } from 'react';
 
 interface ColorPickerCanvasProps {
   pictureSrc: string;
+  initialColor?: string;
   onColorPicked: (hex: string) => void;
   onClose: () => void;
 }
 
 export const ColorPickerCanvas: React.FC<ColorPickerCanvasProps> = ({
   pictureSrc,
+  initialColor,
   onColorPicked,
   onClose,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [selectedColor, setSelectedColor] = useState<string>('#ffffff');
+  const [selectedColor, setSelectedColor] = useState<string>(initialColor || '#ffffff');
   const [loupePos, setLoupePos] = useState<{ x: number; y: number } | null>(null);
-  const [loupeColor, setLoupeColor] = useState<string>('#ffffff');
+  const [loupeColor, setLoupeColor] = useState<string>(initialColor || '#ffffff');
   const [isPicking, setIsPicking] = useState<boolean>(false);
 
   // Redraw image to canvas on mount or src change
