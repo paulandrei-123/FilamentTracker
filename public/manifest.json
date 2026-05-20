@@ -2,14 +2,15 @@
   "short_name": "SpoolFlow",
   "name": "SpoolFlow Filament Tracker",
   "description": "Track and manage your 3D printer filament spools with ease.",
-  "start_url": "/",
+  "start_url": "/FilamentTracker/",
+  "scope": "/FilamentTracker/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#09090b",
   "theme_color": "#a855f7",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/FilamentTracker/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
