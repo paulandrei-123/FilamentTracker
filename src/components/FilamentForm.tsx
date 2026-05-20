@@ -200,7 +200,14 @@ If a value is not found on the label, return null for that field. Make your best
         );
 
         if (!response.ok) {
-          throw new Error(`Gemini API error: ${response.statusText}`);
+          let errorMsg = response.statusText || `Status ${response.status}`;
+          try {
+            const errJson = await response.json();
+            if (errJson?.error?.message) {
+              errorMsg = errJson.error.message;
+            }
+          } catch (_) {}
+          throw new Error(`Gemini API error: ${errorMsg}`);
         }
 
         const data = await response.json();
