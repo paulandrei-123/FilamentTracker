@@ -11,6 +11,63 @@ import { FilamentDetail } from './components/FilamentDetail';
 import { FilamentForm } from './components/FilamentForm';
 import { SettingsPanel } from './components/SettingsPanel';
 
+// Helper to convert hex to RGB
+function hexToRgb(hex: string) {
+  const cleanHex = hex.replace('#', '');
+  const num = parseInt(cleanHex, 16);
+  if (cleanHex.length === 3) {
+    const r = (num >> 8) & 0xf;
+    const g = (num >> 4) & 0xf;
+    const b = num & 0xf;
+    return {
+      r: (r << 4) | r,
+      g: (g << 4) | g,
+      b: (b << 4) | b,
+    };
+  }
+  return {
+    r: (num >> 16) & 0xff,
+    g: (num >> 8) & 0xff,
+    b: num & 0xff,
+  };
+}
+
+const EMOJI_COLORS = [
+  { emoji: '⬜', r: 240, g: 240, b: 240 }, // White
+  { emoji: '⬛', r: 30, g: 30, b: 30 },    // Black
+  { emoji: '🟥', r: 220, g: 40, b: 40 },   // Red
+  { emoji: '🟧', r: 240, g: 140, b: 40 },  // Orange
+  { emoji: '🟨', r: 240, g: 210, b: 40 },  // Yellow
+  { emoji: '🟩', r: 40, g: 180, b: 80 },   // Green
+  { emoji: '🟦', r: 40, g: 100, b: 220 },  // Blue
+  { emoji: '🟪', r: 140, g: 40, b: 220 },  // Purple
+  { emoji: '🟫', r: 120, g: 80, b: 40 },   // Brown
+];
+
+function getClosestEmoji(hex: string) {
+  if (!hex) return '⬜';
+  try {
+    const rgb = hexToRgb(hex);
+    let minDistance = Infinity;
+    let bestEmoji = '⬜';
+    
+    for (const ref of EMOJI_COLORS) {
+      const distance = Math.sqrt(
+        Math.pow(rgb.r - ref.r, 2) +
+        Math.pow(rgb.g - ref.g, 2) +
+        Math.pow(rgb.b - ref.b, 2)
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestEmoji = ref.emoji;
+      }
+    }
+    return bestEmoji;
+  } catch (e) {
+    return '⬜';
+  }
+}
+
 function App() {
   // DB States
   const [filaments, setFilaments] = useState<Filament[]>([]);
@@ -53,11 +110,17 @@ function App() {
     const types = new Set<string>();
     const colors = new Set<string>();
     const subTypes = new Set<string>();
+    const colorToHexMap: Record<string, string> = {};
 
     filaments.forEach((f) => {
       if (f.brand) brands.add(f.brand);
       if (f.type) types.add(f.type);
-      if (f.color) colors.add(f.color);
+      if (f.color) {
+        colors.add(f.color);
+        if (f.colorHex) {
+          colorToHexMap[f.color] = f.colorHex;
+        }
+      }
       if (f.subTypes) {
         f.subTypes.forEach((sub) => {
           if (sub) subTypes.add(sub);
@@ -70,6 +133,7 @@ function App() {
       types: Array.from(types).sort(),
       colors: Array.from(colors).sort(),
       subTypes: Array.from(subTypes).sort(),
+      colorToHexMap,
     };
   }, [filaments]);
 
@@ -106,6 +170,15 @@ function App() {
       return true;
     });
   }, [filaments, searchQuery, selectedBrand, selectedType, selectedColor, selectedSubType]);
+
+  // Derived stats
+  const { totalSpoolsCount, totalItemsCount } = useMemo(() => {
+    const sum = filteredFilaments.reduce((acc, f) => acc + f.amount, 0);
+    return {
+      totalSpoolsCount: parseFloat(sum.toFixed(2)),
+      totalItemsCount: filteredFilaments.length,
+    };
+  }, [filteredFilaments]);
 
   // Selected Filament details
   const activeFilament = useMemo(() => {
@@ -299,9 +372,15 @@ function App() {
               onChange={(e) => setSelectedColor(e.target.value)}
             >
               <option value="">All Colors</option>
-              {filterOptions.colors.map((c, idx) => (
-                <option key={idx} value={c}>{c}</option>
-              ))}
+              {filterOptions.colors.map((c, idx) => {
+                const hex = filterOptions.colorToHexMap[c] || '#ffffff';
+                const emoji = getClosestEmoji(hex);
+                return (
+                  <option key={idx} value={c}>
+                    {emoji} {c}
+                  </option>
+                );
+              })}
             </select>
 
             {/* Subtypes Filter */}
@@ -316,21 +395,31 @@ function App() {
               ))}
             </select>
 
-            {hasActiveFilters && (
-              <button className="clear-filters-btn" onClick={handleClearFilters}>
-                Clear
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            )}
+            <button
+              className={`clear-filters-btn ${hasActiveFilters ? 'active' : ''}`}
+              onClick={handleClearFilters}
+              disabled={!hasActiveFilters}
+              title="Reset all filters"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '2px' }}>
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <polyline points="3 3 3 8 8 8" />
+              </svg>
+              Reset Filters
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Grid View */}
       <main className="main-content">
+        <div className="grid-header-stats">
+          <span className="stats-label">Library Inventory</span>
+          <span className="stats-count">
+            <strong>{totalSpoolsCount}</strong> {totalSpoolsCount === 1 ? 'Spool' : 'Spools'} ({totalItemsCount} {totalItemsCount === 1 ? 'type' : 'types'})
+          </span>
+        </div>
+
         {filteredFilaments.length > 0 ? (
           <div className="filament-grid">
             {filteredFilaments.map((f) => (
