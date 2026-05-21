@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Filament } from '../types';
 import { ColorPickerCanvas } from './ColorPickerCanvas';
 
@@ -45,6 +45,36 @@ const normalizeHex = (colorStr: string): string => {
   return '#3b82f6';
 };
 
+// Helper to find a matching brand in existing filaments using casing/whitespace/punctuation-insensitive match
+const findMatchingBrand = (newBrand: string, filaments: Filament[]): string => {
+  const cleanNew = newBrand.trim();
+  const normalizedNew = cleanNew.toLowerCase().replace(/[\s\-_]+/g, '');
+  if (!normalizedNew) return cleanNew;
+  for (const f of filaments) {
+    if (f.brand.toLowerCase().replace(/[\s\-_]+/g, '') === normalizedNew) {
+      return f.brand;
+    }
+  }
+  return cleanNew;
+};
+
+// Helper to find a matching sub-type in existing filaments using casing/whitespace/punctuation-insensitive match
+const findMatchingSubType = (newSubType: string, filaments: Filament[]): string => {
+  const cleanNew = newSubType.trim();
+  const normalizedNew = cleanNew.toLowerCase().replace(/[\s\-_]+/g, '');
+  if (!normalizedNew) return cleanNew;
+  for (const f of filaments) {
+    if (f.subTypes) {
+      for (const sub of f.subTypes) {
+        if (sub.toLowerCase().replace(/[\s\-_]+/g, '') === normalizedNew) {
+          return sub;
+        }
+      }
+    }
+  }
+  return cleanNew;
+};
+
 interface FilamentFormProps {
   filament?: Filament; // If editing or duplicating
   isDuplicate?: boolean; // If duplicating
@@ -83,6 +113,39 @@ export const FilamentForm: React.FC<FilamentFormProps> = ({
   );
   const [pictures, setPictures] = useState<string[]>(filament?.pictures || []);
 
+  // Derived lists for existing values dropdowns
+  const uniqueBrands = useMemo(() => {
+    const brands = new Set<string>();
+    existingFilaments.forEach((f) => {
+      if (f.brand) brands.add(f.brand);
+    });
+    return Array.from(brands).sort();
+  }, [existingFilaments]);
+
+  const uniqueSubTypes = useMemo(() => {
+    const subs = new Set<string>();
+    existingFilaments.forEach((f) => {
+      if (f.subTypes) {
+        f.subTypes.forEach((s) => {
+          if (s) subs.add(s);
+        });
+      }
+    });
+    return Array.from(subs).sort();
+  }, [existingFilaments]);
+
+  // Toggle states for text-input vs dropdown selects
+  const [showNewBrandInput, setShowNewBrandInput] = useState(() => {
+    if (uniqueBrands.length === 0) return true;
+    if (!filament?.brand) return false;
+    if (!uniqueBrands.includes(filament.brand)) return true;
+    return false;
+  });
+
+  const [showNewSubTypeInput, setShowNewSubTypeInput] = useState(() => {
+    return uniqueSubTypes.length === 0;
+  });
+
   const originalAutoName = filament
     ? `${filament.brand} ${filament.type} ${filament.color} ${(filament.subTypes || []).join(' ')}`.trim().replace(/\s+/g, ' ')
     : '';
@@ -115,8 +178,11 @@ export const FilamentForm: React.FC<FilamentFormProps> = ({
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       const val = subTypeInput.trim();
-      if (val && !subTypes.includes(val)) {
-        setSubTypes([...subTypes, val]);
+      if (val) {
+        const matched = findMatchingSubType(val, existingFilaments);
+        if (!subTypes.includes(matched)) {
+          setSubTypes([...subTypes, matched]);
+        }
       }
       setSubTypeInput('');
     }
@@ -302,7 +368,16 @@ If a value is not found on the label, return null for that field. Make your best
   };
 
   const fillFormFromScannedData = (parsed: any) => {
-    if (parsed.brand) setBrand(parsed.brand);
+    if (parsed.brand) {
+      const matchedBrand = findMatchingBrand(parsed.brand, existingFilaments);
+      setBrand(matchedBrand);
+      // Determine if scanned brand matches existing so dropdown view matches
+      if (uniqueBrands.includes(matchedBrand)) {
+        setShowNewBrandInput(false);
+      } else {
+        setShowNewBrandInput(true);
+      }
+    }
     if (parsed.type) setType(parsed.type);
     if (parsed.color) setColor(parsed.color);
     if (parsed.colorHex) {
@@ -312,7 +387,7 @@ If a value is not found on the label, return null for that field. Make your best
     }
     if (parsed.subTypes && Array.isArray(parsed.subTypes)) {
       // Merge unique
-      setSubTypes(parsed.subTypes.filter(Boolean));
+      setSubTypes(parsed.subTypes.filter(Boolean).map((st: string) => findMatchingSubType(st, existingFilaments)));
     }
     if (parsed.nozzleTempMin) setNozzleTempMin(parsed.nozzleTempMin);
     if (parsed.nozzleTempMax) setNozzleTempMax(parsed.nozzleTempMax);
@@ -338,7 +413,9 @@ If a value is not found on the label, return null for that field. Make your best
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!brand.trim()) {
+    const cleanedBrand = findMatchingBrand(brand, existingFilaments);
+
+    if (!cleanedBrand) {
       alert('Brand is required!');
       return;
     }
@@ -351,18 +428,28 @@ If a value is not found on the label, return null for that field. Make your best
       return;
     }
 
+    // Process sub-type input if anything was typed but not converted to a chip
+    let finalSubTypes = subTypes.map((st: string) => findMatchingSubType(st, existingFilaments));
+    const remainingSubType = subTypeInput.trim();
+    if (remainingSubType) {
+      const matchedRemaining = findMatchingSubType(remainingSubType, existingFilaments);
+      if (!finalSubTypes.includes(matchedRemaining)) {
+        finalSubTypes.push(matchedRemaining);
+      }
+    }
+
     const savedName = isNameAutogenerated
-      ? name
-      : name.trim() || `${brand} ${type} ${color} ${subTypes.join(' ')}`.trim().replace(/\s+/g, ' ');
+      ? `${cleanedBrand} ${type} ${color} ${finalSubTypes.join(' ')}`.trim().replace(/\s+/g, ' ')
+      : name.trim() || `${cleanedBrand} ${type} ${color} ${finalSubTypes.join(' ')}`.trim().replace(/\s+/g, ' ');
 
     const newFilament: Filament = {
       id: (filament && !isDuplicate) ? filament.id : crypto.randomUUID(),
       name: savedName,
-      brand: brand.trim(),
+      brand: cleanedBrand,
       type: type.trim(),
       color: color.trim(),
       colorHex,
-      subTypes,
+      subTypes: finalSubTypes,
       pictures,
       nozzleTempMin: nozzleTempMin === '' ? null : Number(nozzleTempMin),
       nozzleTempMax: nozzleTempMax === '' ? null : Number(nozzleTempMax),
@@ -478,20 +565,54 @@ If a value is not found on the label, return null for that field. Make your best
                 <label className="form-label">
                   Brand <span className="required">*</span>
                 </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="e.g. eSUN, Sunlu"
-                  list="brands-suggestions"
-                  required
-                />
-                <datalist id="brands-suggestions">
-                  {Array.from(new Set(existingFilaments.map((f) => f.brand))).map((b, idx) => (
-                    <option key={idx} value={b} />
-                  ))}
-                </datalist>
+                {showNewBrandInput ? (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ flex: 1 }}
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      placeholder="e.g. eSUN, Sunlu"
+                      required
+                    />
+                    {uniqueBrands.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setShowNewBrandInput(false);
+                          if (!brand || !uniqueBrands.includes(brand)) {
+                            setBrand(uniqueBrands[0] || '');
+                          }
+                        }}
+                        style={{ padding: '0 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                      >
+                        Choose Existing
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <select
+                    className="form-select"
+                    value={brand}
+                    onChange={(e) => {
+                      if (e.target.value === '__NEW__') {
+                        setShowNewBrandInput(true);
+                        setBrand('');
+                      } else {
+                        setBrand(e.target.value);
+                      }
+                    }}
+                    required
+                  >
+                    <option value="" disabled>-- Select Brand --</option>
+                    {uniqueBrands.map((b, idx) => (
+                      <option key={idx} value={b}>{b}</option>
+                    ))}
+                    <option value="__NEW__" style={{ fontWeight: 'bold', color: 'var(--accent-color)' }}>+ Add New Brand...</option>
+                  </select>
+                )}
               </div>
 
               {/* Type */}
@@ -568,23 +689,86 @@ If a value is not found on the label, return null for that field. Make your best
 
             {/* Subtypes Tags */}
             <div className="form-group">
-              <label className="form-label">Sub-Types (Press Enter / Comma to add)</label>
-              <div className="tag-input-container">
-                {subTypes.map((tag, idx) => (
-                  <span key={idx} className="tag-pill">
-                    {tag}
-                    <button type="button" onClick={() => removeSubType(idx)}>&times;</button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  className="tag-input-field"
-                  value={subTypeInput}
-                  onChange={(e) => setSubTypeInput(e.target.value)}
-                  onKeyDown={handleAddSubType}
-                  placeholder="e.g. Matte, High Flow"
-                />
-              </div>
+              <label className="form-label">Sub-Types</label>
+              {subTypes.length > 0 && (
+                <div className="tag-input-container" style={{ marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                  {subTypes.map((tag, idx) => (
+                    <span key={idx} className="tag-pill">
+                      {tag}
+                      <button type="button" onClick={() => removeSubType(idx)}>&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {showNewSubTypeInput ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ flex: 1 }}
+                    value={subTypeInput}
+                    onChange={(e) => setSubTypeInput(e.target.value)}
+                    onKeyDown={handleAddSubType}
+                    placeholder="Type sub-type and press Enter"
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => {
+                      const val = subTypeInput.trim();
+                      if (val) {
+                        const matched = findMatchingSubType(val, existingFilaments);
+                        if (!subTypes.includes(matched)) {
+                          setSubTypes([...subTypes, matched]);
+                        }
+                        setSubTypeInput('');
+                      }
+                    }}
+                    style={{ padding: '0 12px' }}
+                  >
+                    Add
+                  </button>
+                  {uniqueSubTypes.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        setShowNewSubTypeInput(false);
+                        setSubTypeInput('');
+                      }}
+                      style={{ padding: '0 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                    >
+                      Choose Existing
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <select
+                    className="form-select"
+                    style={{ flex: 1 }}
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__NEW__') {
+                        setShowNewSubTypeInput(true);
+                      } else if (val && !subTypes.includes(val)) {
+                        const matched = findMatchingSubType(val, existingFilaments);
+                        setSubTypes([...subTypes, matched]);
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose Existing Sub-Type --</option>
+                    {uniqueSubTypes
+                      .filter((s) => !subTypes.includes(s))
+                      .map((s, idx) => (
+                        <option key={idx} value={s}>{s}</option>
+                      ))}
+                    <option value="__NEW__" style={{ fontWeight: 'bold', color: 'var(--accent-color)' }}>+ Add Custom Sub-Type...</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Heat settings intervals */}
