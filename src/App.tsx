@@ -27,6 +27,7 @@ function App() {
   const [selectedFilamentId, setSelectedFilamentId] = useState<string | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Initialize DB and load files
@@ -123,9 +124,10 @@ function App() {
       // Close forms
       setIsAddingNew(false);
       setIsEditing(false);
+      setIsDuplicating(false);
       
-      // If we edited the active detail, keep it selected or close depending on preference
-      // Let's update details view
+      // Select the new / edited filament to view its details
+      setSelectedFilamentId(updatedFilament.id);
     } catch (e) {
       alert('Error saving filament spool: ' + String(e));
     }
@@ -374,21 +376,23 @@ function App() {
       </button>
 
       {/* Dialog: Detail Bottom Sheet */}
-      {activeFilament && !isEditing && (
+      {activeFilament && !isEditing && !isDuplicating && (
         <FilamentDetail
           filament={activeFilament}
           onClose={() => setSelectedFilamentId(null)}
           onEdit={() => setIsEditing(true)}
+          onDuplicate={() => setIsDuplicating(true)}
           onDelete={handleDeleteFilament}
           onUpdateAmount={handleUpdateAmount}
           onUpdatePictures={handleUpdatePictures}
         />
       )}
 
-      {/* Dialog: Form Bottom Sheet (Add/Edit) */}
-      {(isAddingNew || (isEditing && activeFilament)) && (
+      {/* Dialog: Form Bottom Sheet (Add/Edit/Duplicate) */}
+      {(isAddingNew || (isEditing && activeFilament) || (isDuplicating && activeFilament)) && (
         <FilamentForm
-          filament={isEditing && activeFilament ? activeFilament : undefined}
+          filament={(isEditing || isDuplicating) && activeFilament ? activeFilament : undefined}
+          isDuplicate={isDuplicating}
           existingFilaments={filaments}
           geminiKey={appSettings.geminiKey}
           onSave={handleSaveFilament}
@@ -396,6 +400,7 @@ function App() {
           onClose={() => {
             setIsAddingNew(false);
             setIsEditing(false);
+            setIsDuplicating(false);
           }}
         />
       )}

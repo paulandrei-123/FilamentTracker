@@ -5,6 +5,7 @@ interface FilamentDetailProps {
   filament: Filament;
   onClose: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onDelete: (id: string) => void;
   onUpdateAmount: (id: string, newAmount: number) => void;
   onUpdatePictures: (id: string, newPictures: string[]) => void;
@@ -14,6 +15,7 @@ export const FilamentDetail: React.FC<FilamentDetailProps> = ({
   filament,
   onClose,
   onEdit,
+  onDuplicate,
   onDelete,
   onUpdateAmount,
   onUpdatePictures,
@@ -136,7 +138,13 @@ export const FilamentDetail: React.FC<FilamentDetailProps> = ({
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>{filament.name}</h2>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn-icon" onClick={onEdit} aria-label="Edit filament">
+            <button className="btn-icon" onClick={onDuplicate} title="Duplicate filament" aria-label="Duplicate filament">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+            <button className="btn-icon" onClick={onEdit} title="Edit filament" aria-label="Edit filament">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
